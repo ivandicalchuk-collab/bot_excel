@@ -23,7 +23,7 @@
     {
       "parameters": {
         "options": {
-          "sheetName": "Лист 1",
+          "sheetName": "Item",
           "range": "A1:Z1000",
           "headerRow": true
         }
@@ -137,7 +137,7 @@
       "parameters": {
         "filePath": "C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx",
         "options": {
-          "sheetName": "Лист 1",
+          "sheetName": "Item",
           "headerRow": true
         },
         "operation": "update",
