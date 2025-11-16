@@ -2,25 +2,52 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 
-// Получаем данные из аргументов или stdin
+// Получаем данные из аргументов или файла
 const inputFile = process.argv[2];
-const outputFile = process.argv[3] || inputFile;
+let outputFile = process.argv[3];
 let updatesData = process.argv[4];
+
+// Проверяем, является ли updatesData путем к файлу (временный файл)
+if (updatesData && fs.existsSync(updatesData)) {
+  // Если это путь к файлу, читаем base64 из него
+  try {
+    updatesData = fs.readFileSync(updatesData, 'utf8');
+    console.error('DEBUG: Read base64 from temp file:', updatesData.length, 'chars');
+  } catch (error) {
+    console.error('DEBUG: Error reading temp file:', error.message);
+    throw error;
+  }
+}
+
+// Если outputFile не указан или пустая строка, создаем новый файл с суффиксом "_updated"
+if (!outputFile || outputFile.trim() === '') {
+  const ext = path.extname(inputFile);
+  const basename = path.basename(inputFile, ext);
+  const dirname = path.dirname(inputFile);
+  outputFile = path.join(dirname, `${basename}_updated${ext}`);
+}
+
+// Нормализуем пути для Windows (заменяем / на \\)
+const normalizedInput = inputFile.replace(/\//g, '\\');
+const normalizedOutput = outputFile.replace(/\//g, '\\');
 
 // Отладочная информация
 console.error('DEBUG: Script started');
-console.error('DEBUG: inputFile:', inputFile);
-console.error('DEBUG: outputFile:', outputFile);
+console.error('DEBUG: inputFile:', normalizedInput);
+console.error('DEBUG: outputFile:', normalizedOutput);
 console.error('DEBUG: updatesData length:', updatesData ? updatesData.length : 0);
 console.error('DEBUG: updatesData preview:', updatesData ? updatesData.substring(0, 100) + '...' : 'null');
 
-if (!inputFile || !updatesData) {
+if (!normalizedInput || !updatesData) {
   console.error(JSON.stringify({ 
-    error: 'Недостаточно аргументов. Использование: node update-excel.js <input_file> [output_file] <updates_base64>',
+    error: 'Недостаточно аргументов. Использование: node update-excel.js <input_file> [output_file] <updates_base64_or_file>',
     success: false,
     receivedArgs: {
       argCount: process.argv.length,
-      args: process.argv.slice(0, 5)
+      args: process.argv.slice(0, 5),
+      inputFile: normalizedInput,
+      outputFile: normalizedOutput,
+      updatesDataLength: updatesData ? updatesData.length : 0
     }
   }));
   process.exit(1);
@@ -65,14 +92,23 @@ try {
 }
 
 try {
+  // Проверяем существование входного файла
+  if (!fs.existsSync(normalizedInput)) {
+    throw new Error(`Входной файл не найден: ${normalizedInput}`);
+  }
+  
+  console.error('DEBUG: Reading file:', normalizedInput);
+  
   // Читаем существующий Excel файл
-  const workbook = XLSX.readFile(inputFile);
+  const workbook = XLSX.readFile(normalizedInput);
   const sheetName = 'Item';
   const worksheet = workbook.Sheets[sheetName];
 
   if (!worksheet) {
     throw new Error(`Лист '${sheetName}' не найден в файле`);
   }
+  
+  console.error('DEBUG: File read successfully, sheet found:', sheetName);
 
   // Преобразуем лист в JSON для удобной работы
   const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
@@ -82,11 +118,27 @@ try {
   // Находим индексы столбцов
   const headerRow = jsonData[0];
   const ticketIndex = headerRow.indexOf('№ Тикета');
-  const timeProcessingIndex = headerRow.indexOf('Время обработки');
-  const timeTakingIndex = headerRow.indexOf('Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП');
+  let timeProcessingIndex = headerRow.indexOf('Время обработки');
+  let timeTakingIndex = headerRow.indexOf('Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП');
 
   if (ticketIndex === -1) {
     throw new Error('Столбец "№ Тикета" не найден');
+  }
+
+  // Если столбцов нет - создаем их
+  let createdColumns = [];
+  if (timeProcessingIndex === -1) {
+    timeProcessingIndex = headerRow.length;
+    headerRow.push('Время обработки');
+    createdColumns.push('Время обработки');
+  }
+  if (timeTakingIndex === -1) {
+    timeTakingIndex = headerRow.length;
+    headerRow.push('Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП');
+    createdColumns.push('Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП');
+  }
+  if (createdColumns.length > 0) {
+    console.error('DEBUG: Created missing columns:', createdColumns.join(', '));
   }
 
   // Создаем карту обновлений по номеру тикета
@@ -130,19 +182,16 @@ try {
     }
 
     if (updateData) {
-      if (timeProcessingIndex !== -1) {
-        // Убеждаемся, что столбец существует
-        while (row.length <= timeProcessingIndex) {
-          row.push('');
-        }
-        row[timeProcessingIndex] = updateData.timeProcessing;
+      // Убеждаемся, что столбцы существуют (включая только что созданные)
+      while (row.length <= timeProcessingIndex) {
+        row.push('');
       }
-      if (timeTakingIndex !== -1) {
-        while (row.length <= timeTakingIndex) {
-          row.push('');
-        }
-        row[timeTakingIndex] = updateData.timeTaking;
+      row[timeProcessingIndex] = updateData.timeProcessing;
+
+      while (row.length <= timeTakingIndex) {
+        row.push('');
       }
+      row[timeTakingIndex] = updateData.timeTaking;
       updatedCount++;
       updateDetails.push({
         row: i + 1,
@@ -213,14 +262,27 @@ try {
   workbook.Sheets['DEBUG'] = debugSheet;
 
   // Записываем обновленный файл
-  XLSX.writeFile(workbook, outputFile);
+  console.error('DEBUG: Writing file to:', normalizedOutput);
+  console.error('DEBUG: Output directory exists:', fs.existsSync(path.dirname(normalizedOutput)));
+  
+  try {
+    XLSX.writeFile(workbook, normalizedOutput);
+    console.error('DEBUG: File written successfully to:', normalizedOutput);
+    console.error('DEBUG: Output file exists:', fs.existsSync(normalizedOutput));
+  } catch (writeError) {
+    console.error('DEBUG: Write error:', writeError.message);
+    console.error('DEBUG: Write error stack:', writeError.stack);
+    throw new Error(`Ошибка записи файла: ${writeError.message}. Путь: ${normalizedOutput}`);
+  }
 
-  const message = `Файл успешно обновлен. Обновлено строк: ${updatedCount} из ${updates.length}`;
+  const message = `Файл успешно создан: ${normalizedOutput}. Обновлено строк: ${updatedCount} из ${updates.length}`;
   const result = {
     success: true,
     updatedRows: updatedCount,
     totalUpdates: updates.length,
     totalRows: jsonData.length - 1,
+    inputFile: normalizedInput,
+    outputFile: normalizedOutput,
     message: message,
     debug: debugInfo
   };
@@ -236,8 +298,8 @@ try {
     error: error.message,
     success: false,
     stack: error.stack,
-    inputFile: inputFile,
-    outputFile: outputFile
+    inputFile: normalizedInput,
+    outputFile: normalizedOutput
   }));
   process.exit(1);
 }

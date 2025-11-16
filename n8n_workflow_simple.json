@@ -97,9 +97,9 @@
     {
       "parameters": {
         "command": "node",
-        "arguments": "update-excel.js \"={{ $json.filePath }}\" \"={{ $json.filePath }}\" \"={{ $json.base64Updates }}\"",
+        "arguments": "update-excel-wrapper.js \"={{ $json.filePath || $('Manual Trigger').first().json.filePath }}\" \"\" \"={{ $json.base64Updates }}\"",
         "options": {
-          "cwd": "={{ $json.filePath.replace(/\\\\[^\\\\]+$/, '') }}"
+          "cwd": "={{ ($json.filePath || $('Manual Trigger').first().json.filePath).replace(/\\\\[^\\\\]+$/, '') }}"
         }
       },
       "id": "update-excel-script",
