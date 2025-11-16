@@ -5,68 +5,49 @@
 Этот вариант НЕ требует установки Puppeteer и работает быстрее.
 
 ### Шаги:
+- Создай папку в которую прокинется в будущем папка с проектом bot_excel
+- Скачай Git на сайте, выбрав 
+Git for Windows/x64 Setup. (если еще не установлен): 
+```
+https://git-scm.com/install/windows
+```
+- Скачай и установи node.js, скачав на сайте, выбрав Windows Installer (.msi):
+```
+https://nodejs.org/en/download
+```
+- Запусти команду в этйо папке в терминале Powershell
+```
+git clone https://github.com/ivandicalchuk-collab/bot_excel.git
+```
+- Открой в курсоре папку и запусти терминал комбинацией клавиш CTRL+~
 
-1. **Импортируйте workflow в N8N:**
-   - Откройте N8N (http://localhost:5678)
-   - Меню → Import from File
-   - Выберите `n8n_workflow_simple.json`
+- Запусти команду на установку зависимостей:
 
-2. **Проверьте пути к Excel файлу:**
-   - Откройте узел "Read Excel File"
-   - Убедитесь, что путь правильный: `C:\Users\ASUS\Desktop\bot_excel\calceulated_algoritm_tg_billing.xlsx`
-   - То же самое в узле "Update Excel File"
+```
+npm install
+```
 
-3. **Запустите workflow:**
-   - Нажмите "Execute Workflow"
-   - Дождитесь завершения
-   - Проверьте результаты в Excel
+- После установки зависимостей запусти команду на запуск n8n локально:
+```
+n8n start
+```
 
-## Вариант 2: Workflow с Puppeteer (использует сайт planetcalc.ru)
+- Зайди по адресу написанному в терминале или по дефолту на
+```
+http://localhost:5678
+```
+- Зарегистрируй локальный аккаунт, заполнив все необходимые поля
 
-Этот вариант требует установки Puppeteer и реально взаимодействует с сайтом.
-
-### Шаги:
-
-1. **Установите зависимости:**
-   ```bash
-   cd C:\Users\ASUS\Desktop\bot_excel
-   npm install puppeteer
-   ```
-
-2. **Импортируйте workflow в N8N:**
-   - Откройте N8N (http://localhost:5678)
-   - Меню → Import from File
-   - Выберите `n8n_workflow_puppeteer.json`
-
-3. **Проверьте пути:**
-   - В узлах "Read Excel File" и "Update Excel File" проверьте путь к Excel файлу
-   - В узлах "Prepare First Calculation" и "Prepare Second Calculation" проверьте путь `projectPath`
-   - В узлах "Calculate First Time (Puppeteer)" и "Calculate Second Time (Puppeteer)" проверьте путь `cwd`
-
-4. **Запустите workflow:**
-   - Нажмите "Execute Workflow"
-   - Дождитесь завершения
-   - Проверьте результаты в Excel
-
-## Важно!
-
-- Убедитесь, что Excel файл **закрыт** перед запуском workflow
-- Первая строка Excel должна содержать заголовки столбцов
-- Данные начинаются со второй строки
-
-## Формат данных в Excel
-
-Убедитесь, что в Excel файле есть следующие столбцы:
-- № Тикета
-- Дата передачи
-- Время передачи
-- Дата возврата
-- Время возврата
-- Дата взятия тикета в работу сотрудником ЦКП
-- Время взятия тикета в работу сотрудником ЦКП
-
-Результаты будут записаны в:
-- Время обработки
-- Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП
-
-
+- Нажми Create workflow
+- Нажми на три точки на холсте и выбери Import from File
+- Выбери n8n_workflow_simple.json, который лежит в корне папки bot_excel
+- На стартовом шаге Manual Trigger нажми отредактировать Output и добавь в объект переменную filePath  с путем до исходного файла, должно выглядеть примерно вот так:
+```
+[
+  {
+    "filePath": "C:/Users/ASUS/Desktop/bot_excel/calceulated_algoritm_tg_billing.xlsx"
+  }
+]
+```
+- Нажми Excute Workflow
+- Посмотри новый файл с постфиксом _updated
