@@ -1,0 +1,128 @@
+{
+  "name": "Excel Calculator Bot - Simple Version",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "calceulated_algoritm_tg_billing.xlsx",
+        "filePath": "C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx"
+      },
+      "id": "read-binary-file",
+      "name": "Read Binary File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "sheetName": "Лист 1",
+          "range": "A1:Z1000",
+          "headerRow": true
+        }
+      },
+      "id": "read-excel",
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Фильтруем строки, где есть номер тикета (начиная со 2-й строки)\nconst items = $input.all();\nconst filtered = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const ticketNumber = item.json['№ Тикета'];\n  // Пропускаем первую строку (заголовки) и берем только строки с тикетами\n  if (i > 0 && ticketNumber && ticketNumber !== '' && ticketNumber !== null && ticketNumber !== undefined) {\n    filtered.push(item);\n  }\n}\n\nreturn filtered;"
+      },
+      "id": "filter-rows",
+      "name": "Filter Rows with Tickets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-rows",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Функция для расчета разницы времени\nfunction calculateTimeDifference(date1, time1, date2, time2) {\n  // Нормализуем формат даты\n  function normalizeDate(dateStr) {\n    // Если дата в формате ДД.ММ.ГГГГ, преобразуем в ГГГГ-ММ-ДД\n    if (dateStr.includes('.')) {\n      const parts = dateStr.split('.');\n      if (parts.length === 3) {\n        return `${parts[2]}-${parts[1]}-${parts[0]}`;\n      }\n    }\n    return dateStr;\n  }\n  \n  // Нормализуем формат времени\n  function normalizeTime(timeStr) {\n    // Убираем секунды, если есть\n    return timeStr.length > 5 ? timeStr.substring(0, 5) : timeStr;\n  }\n  \n  const normalizedDate1 = normalizeDate(date1);\n  const normalizedDate2 = normalizeDate(date2);\n  const normalizedTime1 = normalizeTime(time1);\n  const normalizedTime2 = normalizeTime(time2);\n  \n  // Формируем полные даты\n  const datetime1 = new Date(`${normalizedDate1} ${normalizedTime1}`);\n  const datetime2 = new Date(`${normalizedDate2} ${normalizedTime2}`);\n  \n  if (isNaN(datetime1.getTime()) || isNaN(datetime2.getTime())) {\n    return 'Ошибка: неверный формат даты/времени';\n  }\n  \n  // Вычисляем разницу в миллисекундах\n  const diff = Math.abs(datetime2 - datetime1);\n  \n  // Конвертируем в дни, часы, минуты, секунды\n  const days = Math.floor(diff / (1000 * 60 * 60 * 24));\n  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));\n  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));\n  const seconds = Math.floor((diff % (1000 * 60)) / 1000);\n  \n  return `${days}д ${hours}ч ${minutes}м ${seconds}с`;\n}\n\n// Получаем данные из текущей строки\nconst item = $input.item.json;\n\n// Первый расчет: Время передачи + Дата передачи -> Время возврата + Дата возврата\nlet result1 = '';\nif (item['Дата передачи'] && item['Время передачи'] && \n    item['Дата возврата'] && item['Время возврата']) {\n  try {\n    result1 = calculateTimeDifference(\n      item['Дата передачи'],\n      item['Время передачи'],\n      item['Дата возврата'],\n      item['Время возврата']\n    );\n  } catch (error) {\n    result1 = `Ошибка: ${error.message}`;\n  }\n}\n\n// Второй расчет: Время передачи + Дата передачи -> Время взятия тикета + Дата взятия тикета\nlet result2 = '';\nif (item['Дата передачи'] && item['Время передачи'] && \n    item['Дата взятия тикета в работу сотрудником ЦКП'] && \n    item['Время взятия тикета в работу сотрудником ЦКП']) {\n  try {\n    result2 = calculateTimeDifference(\n      item['Дата передачи'],\n      item['Время передачи'],\n      item['Дата взятия тикета в работу сотрудником ЦКП'],\n      item['Время взятия тикета в работу сотрудником ЦКП']\n    );\n  } catch (error) {\n    result2 = `Ошибка: ${error.message}`;\n  }\n}\n\n// Возвращаем данные с результатами\nreturn {\n  json: {\n    ...item,\n    'Время обработки': result1,\n    'Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП': result2\n  }\n};"
+      },
+      "id": "calculate-times",
+      "name": "Calculate Time Differences",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx",
+        "options": {
+          "sheetName": "Лист 1",
+          "headerRow": true
+        },
+        "operation": "update",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "№ Тикета": "={{ $json['№ Тикета'] }}",
+            "Время обработки": "={{ $json['Время обработки'] }}",
+            "Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП": "={{ $json['Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП'] }}"
+          }
+        },
+        "options": {
+          "cellFormat": "string"
+        }
+      },
+      "id": "update-excel",
+      "name": "Update Excel File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Read Binary File", "type": "main", "index": 0 }]]
+    },
+    "Read Binary File": {
+      "main": [[{ "node": "Read Excel File", "type": "main", "index": 0 }]]
+    },
+    "Read Excel File": {
+      "main": [[{ "node": "Filter Rows with Tickets", "type": "main", "index": 0 }]]
+    },
+    "Filter Rows with Tickets": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[{ "node": "Calculate Time Differences", "type": "main", "index": 0 }]]
+    },
+    "Calculate Time Differences": {
+      "main": [[{ "node": "Update Excel File", "type": "main", "index": 0 }]]
+    },
+    "Update Excel File": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
