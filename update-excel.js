@@ -118,8 +118,29 @@ try {
   // Находим индексы столбцов
   const headerRow = jsonData[0];
   const ticketIndex = headerRow.indexOf('№ Тикета');
-  let timeProcessingIndex = headerRow.indexOf('Время обработки');
-  let timeTakingIndex = headerRow.indexOf('Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП');
+
+  // Поиск столбцов по "мягкому" совпадению (чтобы ловить заголовки с примечаниями типа "(D2-B2)")
+  function findColumnIndexByPrefixes(row, prefixes) {
+    for (let col = 0; col < row.length; col++) {
+      const cell = String(row[col] ?? '').trim();
+      if (!cell) continue;
+      for (const prefix of prefixes) {
+        if (cell.startsWith(prefix)) {
+          return col;
+        }
+      }
+    }
+    return -1;
+  }
+
+  let timeProcessingIndex = findColumnIndexByPrefixes(headerRow, ['Время обработки']);
+  let timeTakingIndex = findColumnIndexByPrefixes(
+    headerRow,
+    [
+      'Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП',
+      'Время с момента передачи тикета' // сокращенный вариант на случай более короткого заголовка
+    ]
+  );
 
   if (ticketIndex === -1) {
     throw new Error('Столбец "№ Тикета" не найден');
