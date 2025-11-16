@@ -15,6 +15,10 @@ https://git-scm.com/install/windows
 ```
 https://nodejs.org/en/download
 ```
+- Скачай и установи Cursor AI, скачав на сайте:
+```
+https://cursor.com/download
+```
 - Запусти команду в этйо папке в терминале Powershell
 ```
 git clone https://github.com/ivandicalchuk-collab/bot_excel.git
