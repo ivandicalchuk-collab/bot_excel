@@ -2,7 +2,17 @@
   "name": "Excel Calculator Bot - Simple Version",
   "nodes": [
     {
-      "parameters": {},
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "filePath",
+              "type": "string",
+              "stringValue": "C:\\projects\\bot_excel\\calceulated_algoritm_tg_billing.xlsx"
+            }
+          ]
+        }
+      },
       "id": "manual-trigger",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
@@ -11,8 +21,8 @@
     },
     {
       "parameters": {
-        "fileName": "calceulated_algoritm_tg_billing.xlsx",
-        "filePath": "C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx"
+        "fileName": "={{ $json.filePath.split('\\\\').pop() }}",
+        "filePath": "={{ $json.filePath }}"
       },
       "id": "read-binary-file",
       "name": "Read Binary File",
@@ -66,7 +76,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Подготавливаем данные для обновления Excel файла\nconst items = $input.all();\n\n// Извлекаем только нужные данные для обновления\nconst updates = items.map(item => ({\n  '№ Тикета': item.json['№ Тикета'],\n  'Время обработки': item.json['Время обработки'] || '',\n  'Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП': item.json['Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП'] || ''\n}));\n\n// Кодируем JSON в base64 для безопасной передачи через аргументы\nconst updatesJson = JSON.stringify(updates);\nconst base64Updates = Buffer.from(updatesJson).toString('base64');\n\nreturn {\n  json: {\n    base64Updates: base64Updates,\n    updatesCount: updates.length,\n    success: true\n  }\n};"
+        "jsCode": "// Подготавливаем данные для обновления Excel файла\nconst items = $input.all();\n\n// Извлекаем только нужные данные для обновления\nconst updates = items.map(item => ({\n  '№ Тикета': item.json['№ Тикета'],\n  'Время обработки': item.json['Время обработки'] || '',\n  'Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП': item.json['Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП'] || ''\n}));\n\n// Кодируем JSON в base64 для безопасной передачи через аргументы\nconst updatesJson = JSON.stringify(updates);\nconst base64Updates = Buffer.from(updatesJson).toString('base64');\n\n// Отладочная информация\nconsole.log('=== DEBUG: Prepare Updates ===');\nconsole.log('Updates count:', updates.length);\nconsole.log('Updates sample:', JSON.stringify(updates.slice(0, 2)));\nconsole.log('Base64 length:', base64Updates.length);\nconsole.log('Base64 preview:', base64Updates.substring(0, 100) + '...');\n\n// Возвращаем один элемент с данными для обновления\nreturn {\n  json: {\n    base64Updates: base64Updates,\n    updatesCount: updates.length,\n    updates: updates, // ВСЕ обновления, не только первые 3\n    success: true\n  }\n};"
       },
       "id": "update-excel",
       "name": "Update Excel File",
@@ -76,10 +86,20 @@
     },
     {
       "parameters": {
+        "jsCode": "// Отладочная информация перед запуском скрипта\n// Получаем данные из предыдущего узла (все элементы)\nconst items = $input.all();\nconst firstItem = items[0]?.json || {};\n\n// Получаем filePath из Manual Trigger\nconst filePath = $('Manual Trigger').first().json.filePath;\n\nconsole.log('=== DEBUG: Before Execute Script ===');\nconsole.log('FilePath:', filePath);\nconsole.log('Input items count:', items.length);\nconsole.log('Base64 length:', firstItem.base64Updates ? firstItem.base64Updates.length : 0);\nconsole.log('Updates count:', firstItem.updatesCount);\nconsole.log('Updates sample:', JSON.stringify((firstItem.updates || []).slice(0, 3)));\n\n// Возвращаем один элемент с данными для передачи в executeCommand\nreturn {\n  json: {\n    ...firstItem,\n    filePath: filePath,\n    debug: {\n      base64Length: firstItem.base64Updates ? firstItem.base64Updates.length : 0,\n      updatesCount: firstItem.updatesCount,\n      inputItemsCount: items.length\n    }\n  }\n};"
+      },
+      "id": "debug-before-script",
+      "name": "Debug Before Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1150, 300]
+    },
+    {
+      "parameters": {
         "command": "node",
-        "arguments": "update-excel.js \"C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx\" \"C:\\Users\\ASUS\\Desktop\\bot_excel\\calceulated_algoritm_tg_billing.xlsx\" \"={{ $json.base64Updates }}\"",
+        "arguments": "update-excel.js \"={{ $json.filePath }}\" \"={{ $json.filePath }}\" \"={{ $json.base64Updates }}\"",
         "options": {
-          "cwd": "C:\\Users\\ASUS\\Desktop\\bot_excel"
+          "cwd": "={{ $json.filePath.replace(/\\\\[^\\\\]+$/, '') }}"
         }
       },
       "id": "update-excel-script",
@@ -90,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Парсим результат выполнения скрипта\nconst item = $input.item.json;\nconst stdout = item.stdout || '';\n\ntry {\n  const result = JSON.parse(stdout.trim());\n  return {\n    json: {\n      success: result.success || false,\n      updatedRows: result.updatedRows || 0,\n      message: result.message || result.error || 'Обновление завершено'\n    }\n  };\n} catch (error) {\n  return {\n    json: {\n      success: false,\n      error: stdout || 'Ошибка парсинга результата',\n      message: 'Не удалось обновить файл'\n    }\n  };\n}"
+        "jsCode": "// Парсим результат выполнения скрипта\nconst item = $input.item.json;\nconst stdout = item.stdout || '';\nconst stderr = item.stderr || '';\n\nconsole.log('=== DEBUG: Script Output ===');\nconsole.log('Stdout length:', stdout.length);\nconsole.log('Stderr length:', stderr.length);\nconsole.log('Stdout preview:', stdout.substring(0, 500));\nconsole.log('Stderr preview:', stderr.substring(0, 500));\n\ntry {\n  // Пытаемся найти JSON в stdout (последняя строка обычно результат)\n  const lines = stdout.trim().split('\\n');\n  let result = null;\n  \n  // Ищем JSON в последних строках\n  for (let i = lines.length - 1; i >= 0; i--) {\n    const line = lines[i].trim();\n    if (line.startsWith('{') && line.endsWith('}')) {\n      try {\n        result = JSON.parse(line);\n        break;\n      } catch (e) {\n        // Продолжаем поиск\n      }\n    }\n  }\n  \n  if (!result) {\n    throw new Error('JSON не найден в stdout');\n  }\n  \n  console.log('=== DEBUG: Parsed Result ===');\n  console.log('Success:', result.success);\n  console.log('Updated rows:', result.updatedRows);\n  console.log('Message:', result.message);\n  \n  return {\n    json: {\n      success: result.success || false,\n      updatedRows: result.updatedRows || 0,\n      totalRows: result.totalRows || 0,\n      message: result.message || result.error || 'Обновление завершено',\n      warning: result.warning || null,\n      debug: result.debug || null,\n      stdout: stdout.substring(0, 1000), // Первые 1000 символов для отладки\n      stderr: stderr.substring(0, 1000) // Первые 1000 символов для отладки\n    }\n  };\n} catch (error) {\n  console.error('=== DEBUG: Parse Error ===');\n  console.error('Error:', error.message);\n  console.error('Full stdout:', stdout);\n  console.error('Full stderr:', stderr);\n  \n  return {\n    json: {\n      success: false,\n      error: error.message,\n      rawStdout: stdout.substring(0, 2000),\n      rawStderr: stderr.substring(0, 2000),\n      message: 'Не удалось обновить файл'\n    }\n  };\n}"
       },
       "id": "parse-update-result",
       "name": "Parse Update Result",
@@ -119,6 +139,9 @@
       "main": [[{ "node": "Update Excel File", "type": "main", "index": 0 }]]
     },
     "Update Excel File": {
+      "main": [[{ "node": "Debug Before Script", "type": "main", "index": 0 }]]
+    },
+    "Debug Before Script": {
       "main": [[{ "node": "Update Excel Script", "type": "main", "index": 0 }]]
     },
     "Update Excel Script": {

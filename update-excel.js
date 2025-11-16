@@ -2,15 +2,26 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 
-// Получаем данные из аргументов
+// Получаем данные из аргументов или stdin
 const inputFile = process.argv[2];
 const outputFile = process.argv[3] || inputFile;
-const updatesData = process.argv[4];
+let updatesData = process.argv[4];
+
+// Отладочная информация
+console.error('DEBUG: Script started');
+console.error('DEBUG: inputFile:', inputFile);
+console.error('DEBUG: outputFile:', outputFile);
+console.error('DEBUG: updatesData length:', updatesData ? updatesData.length : 0);
+console.error('DEBUG: updatesData preview:', updatesData ? updatesData.substring(0, 100) + '...' : 'null');
 
 if (!inputFile || !updatesData) {
   console.error(JSON.stringify({ 
     error: 'Недостаточно аргументов. Использование: node update-excel.js <input_file> [output_file] <updates_base64>',
-    success: false 
+    success: false,
+    receivedArgs: {
+      argCount: process.argv.length,
+      args: process.argv.slice(0, 5)
+    }
   }));
   process.exit(1);
 }
@@ -21,25 +32,34 @@ try {
   // Пробуем декодировать base64
   try {
     const decoded = Buffer.from(updatesData, 'base64').toString('utf8');
+    console.error('DEBUG: Base64 decoded successfully, length:', decoded.length);
     updates = JSON.parse(decoded);
+    console.error('DEBUG: JSON parsed successfully, updates count:', updates.length);
   } catch (base64Error) {
+    console.error('DEBUG: Base64 decode failed:', base64Error.message);
     // Если не base64, пробуем как JSON строку напрямую
     try {
       updates = JSON.parse(updatesData);
     } catch (jsonError) {
-      // Если и это не сработало, пробуем как путь к файлу
+      // Если и это не сработало, пробуем как путь к файлу (на случай если передан путь)
       try {
-        const updatesContent = fs.readFileSync(updatesData, 'utf8');
-        updates = JSON.parse(updatesContent);
+        if (fs.existsSync(updatesData)) {
+          const fileContent = fs.readFileSync(updatesData, 'utf8');
+          const decoded = Buffer.from(fileContent, 'base64').toString('utf8');
+          updates = JSON.parse(decoded);
+        } else {
+          throw new Error(`Не удалось распарсить данные обновлений. Base64 ошибка: ${base64Error.message}, JSON ошибка: ${jsonError.message}`);
+        }
       } catch (fileError) {
-        throw new Error('Не удалось распарсить данные обновлений');
+        throw new Error(`Не удалось распарсить данные обновлений. Base64 ошибка: ${base64Error.message}, JSON ошибка: ${jsonError.message}, File ошибка: ${fileError.message}`);
       }
     }
   }
 } catch (error) {
   console.error(JSON.stringify({
     error: `Ошибка обработки данных обновлений: ${error.message}`,
-    success: false
+    success: false,
+    stack: error.stack
   }));
   process.exit(1);
 }
@@ -92,6 +112,9 @@ try {
   // Обновляем данные в листе
   let updatedCount = 0;
   const notFoundTickets = [];
+  const updateDetails = [];
+  
+  console.error('DEBUG: Starting row updates, total rows:', jsonData.length - 1);
   
   for (let i = 1; i < jsonData.length; i++) {
     const row = jsonData[i];
@@ -121,8 +144,18 @@ try {
         row[timeTakingIndex] = updateData.timeTaking;
       }
       updatedCount++;
+      updateDetails.push({
+        row: i + 1,
+        ticket: ticketNumber,
+        timeProcessing: updateData.timeProcessing,
+        timeTaking: updateData.timeTaking
+      });
+      console.error(`DEBUG: Updated row ${i + 1}, ticket: ${ticketNumber}, timeProcessing: ${updateData.timeProcessing.substring(0, 50)}`);
     }
   }
+  
+  console.error('DEBUG: Update complete. Updated rows:', updatedCount);
+  console.error('DEBUG: Update details:', JSON.stringify(updateDetails).substring(0, 500));
 
   // Проверяем, все ли тикеты были найдены
   for (const [ticket, data] of updatesMap.entries()) {
@@ -145,6 +178,40 @@ try {
   const updatedWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
   workbook.Sheets[sheetName] = updatedWorksheet;
 
+  // Создаем отладочную информацию перед записью
+  const debugInfo = {
+    totalRows: jsonData.length - 1, // без заголовка
+    totalUpdates: updates.length,
+    updatesMap: Array.from(updatesMap.entries()).map(([ticket, data]) => ({
+      ticket,
+      timeProcessing: data.timeProcessing,
+      timeTaking: data.timeTaking
+    })),
+    columnIndexes: {
+      ticket: ticketIndex,
+      timeProcessing: timeProcessingIndex,
+      timeTaking: timeTakingIndex
+    }
+  };
+
+  // Добавляем отладочный лист в workbook
+  const debugSheet = XLSX.utils.json_to_sheet([
+    { 'Информация': 'Отладочная информация' },
+    { 'Дата обновления': new Date().toISOString() },
+    { 'Всего строк в файле': jsonData.length - 1 },
+    { 'Всего обновлений': updates.length },
+    { 'Обновлено строк': updatedCount },
+    { 'Не найдено тикетов': notFoundTickets.length },
+    {},
+    { 'Тикет': 'Время обработки', 'Время взятия': '' },
+    ...updates.map(u => ({
+      'Тикет': u['№ Тикета'],
+      'Время обработки': u['Время обработки'],
+      'Время взятия': u['Время с момента передачи тикета до взятия его обратно в работу сотрудниками ЦКП']
+    }))
+  ]);
+  workbook.Sheets['DEBUG'] = debugSheet;
+
   // Записываем обновленный файл
   XLSX.writeFile(workbook, outputFile);
 
@@ -153,19 +220,24 @@ try {
     success: true,
     updatedRows: updatedCount,
     totalUpdates: updates.length,
-    message: message
+    totalRows: jsonData.length - 1,
+    message: message,
+    debug: debugInfo
   };
   
   if (notFoundTickets.length > 0) {
     result.warning = `Не найдены тикеты в файле: ${notFoundTickets.join(', ')}`;
+    result.notFoundTickets = notFoundTickets;
   }
   
   console.log(JSON.stringify(result));
 } catch (error) {
   console.error(JSON.stringify({
     error: error.message,
-    success: false
+    success: false,
+    stack: error.stack,
+    inputFile: inputFile,
+    outputFile: outputFile
   }));
   process.exit(1);
 }
-
