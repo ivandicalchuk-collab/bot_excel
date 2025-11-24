@@ -3,7 +3,7 @@
 Write-Host "=== Starting n8n ==="
 
 # Set allowlist for Execute Command
-$env:N8N_EXECUTE_COMMAND_ALLOWLIST = "C:\Windows\System32\cmd.exe,C:\projects\bot_excel\run-wrapper.cmd,C:\Program Files\nodejs\node.exe"
+$env:N8N_EXECUTE_COMMAND_ALLOWLIST = "C:\Windows\System32\cmd.exe,C:\projects\bot_excel\run-wrapper.cmd,C:\projects\bot_excel\apply-formatting.bat,C:\Program Files\nodejs\node.exe"
 Write-Host ("N8N_EXECUTE_COMMAND_ALLOWLIST=" + $env:N8N_EXECUTE_COMMAND_ALLOWLIST)
 
 # Try to show n8n version (optional)

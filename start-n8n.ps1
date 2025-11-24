@@ -17,7 +17,7 @@ Write-Host "N8N будет доступен по адресу: http://localhost:
 Write-Host "Для остановки нажмите Ctrl+C`n" -ForegroundColor Yellow
 
 # Разрешаем запуск внешних команд для Execute Command (allowlist)
-$env:N8N_EXECUTE_COMMAND_ALLOWLIST = "C:\Windows\System32\cmd.exe,C:\projects\bot_excel\run-wrapper.cmd,C:\Program Files\nodejs\node.exe"
+$env:N8N_EXECUTE_COMMAND_ALLOWLIST = "C:\Windows\System32\cmd.exe,C:\projects\bot_excel\run-wrapper.cmd,C:\projects\bot_excel\apply-formatting.bat,C:\Program Files\nodejs\node.exe"
 Write-Host ("N8N_EXECUTE_COMMAND_ALLOWLIST=" + $env:N8N_EXECUTE_COMMAND_ALLOWLIST) -ForegroundColor Cyan
 
 # Запуск N8N

@@ -111,7 +111,8 @@ try {
   console.error('DEBUG: File read successfully, sheet found:', sheetName);
 
   // Преобразуем лист в JSON для удобной работы
-  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+  // Используем raw: true, чтобы сохранить исходные значения без преобразования
+  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false });
 
   // Обновления уже загружены
 
@@ -182,7 +183,17 @@ try {
     }
   }
 
-  // Обновляем данные в листе
+  // ВАЖНО: Работаем напрямую с исходным worksheet, чтобы сохранить все исходные значения и форматирование
+  // Не используем aoa_to_sheet, так как это пересоздает лист и теряет исходные данные
+  const updatedWorksheet = worksheet;
+  
+  // Функция для получения адреса ячейки (нужна для обновления ячеек)
+  const getCellAddress = (row, col) => {
+    const colLetter = XLSX.utils.encode_col(col);
+    return colLetter + (row + 1);
+  };
+  
+  // Обновляем данные в листе напрямую через worksheet
   let updatedCount = 0;
   const notFoundTickets = [];
   const updateDetails = [];
@@ -203,16 +214,25 @@ try {
     }
 
     if (updateData) {
-      // Убеждаемся, что столбцы существуют (включая только что созданные)
-      while (row.length <= timeProcessingIndex) {
-        row.push('');
+      // Обновляем ячейки напрямую в исходном worksheet
+      if (timeProcessingIndex !== -1) {
+        const cellAddress = getCellAddress(i, timeProcessingIndex);
+        if (!updatedWorksheet[cellAddress]) {
+          updatedWorksheet[cellAddress] = {};
+        }
+        updatedWorksheet[cellAddress].v = updateData.timeProcessing;
+        updatedWorksheet[cellAddress].t = 's'; // строка
       }
-      row[timeProcessingIndex] = updateData.timeProcessing;
-
-      while (row.length <= timeTakingIndex) {
-        row.push('');
+      
+      if (timeTakingIndex !== -1) {
+        const cellAddress = getCellAddress(i, timeTakingIndex);
+        if (!updatedWorksheet[cellAddress]) {
+          updatedWorksheet[cellAddress] = {};
+        }
+        updatedWorksheet[cellAddress].v = updateData.timeTaking;
+        updatedWorksheet[cellAddress].t = 's'; // строка
       }
-      row[timeTakingIndex] = updateData.timeTaking;
+      
       updatedCount++;
       updateDetails.push({
         row: i + 1,
@@ -243,9 +263,113 @@ try {
       notFoundTickets.push(ticket);
     }
   }
-
-  // Преобразуем обратно в лист
-  const updatedWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
+  
+  // Находим индексы столбцов для форматирования даты и времени
+  const dateTransferIndex = findColumnIndexByPrefixes(headerRow, ['Дата передачи']);
+  const timeTransferIndex = findColumnIndexByPrefixes(headerRow, ['Время передачи']);
+  const dateReturnIndex = findColumnIndexByPrefixes(headerRow, ['Дата возврата']);
+  const timeReturnIndex = findColumnIndexByPrefixes(headerRow, ['Время возврата']);
+  const dateTakingIndex = findColumnIndexByPrefixes(headerRow, ['Дата взятия тикета в работу сотрудником ЦКП']);
+  const timeTakingWorkIndex = findColumnIndexByPrefixes(headerRow, ['Время взятия тикета в работу сотрудником ЦКП']);
+  
+  console.error('DEBUG: Column indexes for formatting:', {
+    dateTransfer: dateTransferIndex,
+    timeTransfer: timeTransferIndex,
+    dateReturn: dateReturnIndex,
+    timeReturn: timeReturnIndex,
+    dateTaking: dateTakingIndex,
+    timeTakingWork: timeTakingWorkIndex
+  });
+  
+  // Применяем форматирование к столбцам даты и времени
+  // getCellAddress уже определена выше
+  
+  // Форматируем все строки данных (начиная со 2-й строки, т.к. 1-я - заголовок)
+  let formattedCellsCount = 0;
+  for (let row = 1; row < jsonData.length; row++) {
+    // Форматируем столбцы даты
+    // ВАЖНО: Применяем только формат, сохраняя исходное значение ячейки
+    if (dateTransferIndex !== -1) {
+      const cellAddress = getCellAddress(row, dateTransferIndex);
+      const cell = updatedWorksheet[cellAddress];
+      if (cell) {
+        // Сохраняем исходное значение и тип
+        const originalValue = cell.v;
+        const originalType = cell.t;
+        // Применяем только формат даты
+        cell.z = 'dd.mm.yyyy';
+        // Восстанавливаем исходное значение и тип, если они были
+        if (originalValue !== undefined) {
+          cell.v = originalValue;
+        }
+        if (originalType !== undefined) {
+          cell.t = originalType;
+        }
+        formattedCellsCount++;
+      }
+    }
+    if (dateReturnIndex !== -1) {
+      const cellAddress = getCellAddress(row, dateReturnIndex);
+      const cell = updatedWorksheet[cellAddress];
+      if (cell) {
+        const originalValue = cell.v;
+        const originalType = cell.t;
+        cell.z = 'dd.mm.yyyy';
+        if (originalValue !== undefined) {
+          cell.v = originalValue;
+        }
+        if (originalType !== undefined) {
+          cell.t = originalType;
+        }
+        formattedCellsCount++;
+      }
+    }
+    if (dateTakingIndex !== -1) {
+      const cellAddress = getCellAddress(row, dateTakingIndex);
+      const cell = updatedWorksheet[cellAddress];
+      if (cell) {
+        const originalValue = cell.v;
+        const originalType = cell.t;
+        cell.z = 'dd.mm.yyyy';
+        if (originalValue !== undefined) {
+          cell.v = originalValue;
+        }
+        if (originalType !== undefined) {
+          cell.t = originalType;
+        }
+        formattedCellsCount++;
+      }
+    }
+    
+    // Форматируем столбцы времени
+    if (timeTransferIndex !== -1) {
+      const cellAddress = getCellAddress(row, timeTransferIndex);
+      if (updatedWorksheet[cellAddress]) {
+        updatedWorksheet[cellAddress].z = 'hh:mm';
+        updatedWorksheet[cellAddress].t = 'n'; // тип число
+        formattedCellsCount++;
+      }
+    }
+    if (timeReturnIndex !== -1) {
+      const cellAddress = getCellAddress(row, timeReturnIndex);
+      if (updatedWorksheet[cellAddress]) {
+        updatedWorksheet[cellAddress].z = 'hh:mm';
+        updatedWorksheet[cellAddress].t = 'n';
+        formattedCellsCount++;
+      }
+    }
+    if (timeTakingWorkIndex !== -1) {
+      const cellAddress = getCellAddress(row, timeTakingWorkIndex);
+      if (updatedWorksheet[cellAddress]) {
+        updatedWorksheet[cellAddress].z = 'hh:mm';
+        updatedWorksheet[cellAddress].t = 'n';
+        formattedCellsCount++;
+      }
+    }
+  }
+  
+  console.error(`DEBUG: Applied formatting to ${formattedCellsCount} cells`);
+  
   workbook.Sheets[sheetName] = updatedWorksheet;
 
   // Создаем отладочную информацию перед записью
